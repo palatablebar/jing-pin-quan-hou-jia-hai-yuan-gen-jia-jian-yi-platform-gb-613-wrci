@@ -37,12 +37,12 @@ export const PERMISSIONS = {
     'competitor:read', 'competitor:write',
     'sku:read', 'sku:write',
     'rule:read', 'rule:write',
-    'snapshot:read',
+    'snapshot:read', 'snapshot:sync',
     'run:read', 'run:create',
     'advice:read', 'advice:decide',
     'export:read', 'audit:read',
   ],
-  analyst: ['overview:read', 'competitor:read', 'sku:read', 'rule:read', 'snapshot:read', 'run:read', 'run:create', 'advice:read'],
+  analyst: ['overview:read', 'competitor:read', 'sku:read', 'rule:read', 'snapshot:read', 'snapshot:sync', 'run:read', 'run:create', 'advice:read'],
   viewer: ['overview:read', 'competitor:read', 'sku:read', 'rule:read', 'snapshot:read', 'run:read', 'advice:read'],
 };
 
@@ -77,6 +77,12 @@ export const ENUMS = {
     pending: '待审批',
     approved: '已批改价',
     rejected: '已驳回',
+    stale: '已失效',
+  },
+  availability: {
+    in_stock: '现货可售',
+    out_of_stock: '临时缺货',
+    delisted: '已下架',
   },
   action: {
     follow: '跟价下调',
@@ -106,7 +112,11 @@ export function riskTone(risk) {
 }
 
 export function statusTone(status) {
-  return { pending: 'pending warn', approved: 'ok', rejected: 'danger' }[status] || 'info';
+  return { pending: 'pending warn', approved: 'ok', rejected: 'danger', stale: 'info' }[status] || 'info';
+}
+
+export function availabilityTone(availability) {
+  return { in_stock: 'ok', out_of_stock: 'warn', delisted: 'danger' }[availability] || 'info';
 }
 
 export function optionList(dict, withAll = '全部') {

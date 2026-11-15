@@ -10,6 +10,7 @@ ACTIONS: dict[str, str] = {
     "rule.create": "新建跟价规则",
     "rule.update": "修改跟价规则",
     "snapshot.capture": "抓价快照入库",
+    "snapshot.availability": "上游可售状态同步",
     "run.create": "发起抓价测算",
     "run.complete": "测算完成",
     "advice.decide": "审批跟价建议",

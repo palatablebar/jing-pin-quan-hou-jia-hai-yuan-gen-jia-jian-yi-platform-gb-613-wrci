@@ -6,7 +6,7 @@ from datetime import date
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from src.constants.enums import CATEGORY_LABELS, PLATFORM_LABELS
+from src.constants.enums import AVAILABILITY_LABELS, CATEGORY_LABELS, PLATFORM_LABELS, Availability
 from src.models.competitor import Competitor
 from src.models.sku import Sku
 from src.models.snapshot import Snapshot
@@ -29,6 +29,7 @@ def serialize(db: Session, snapshot: Snapshot, role: str = "viewer", *, detail: 
     sku = db.get(Sku, snapshot.sku_id)
     competitor = db.get(Competitor, snapshot.competitor_id) if snapshot.competitor_id else None
     effective = snapshot.effective or {}
+    availability = snapshot.availability or Availability.IN_STOCK.value
     data = {
         "id": snapshot.id,
         "sku_id": snapshot.sku_id,
@@ -47,6 +48,11 @@ def serialize(db: Session, snapshot: Snapshot, role: str = "viewer", *, detail: 
         "platform_coupon": snapshot.platform_coupon,
         "member_discount": snapshot.member_discount,
         "stock": snapshot.stock,
+        "availability": availability,
+        "availability_label": AVAILABILITY_LABELS.get(availability, availability),
+        "sellable": availability == Availability.IN_STOCK.value,
+        "availability_note": snapshot.availability_note,
+        "availability_updated_at": iso_utc(snapshot.availability_updated_at),
         "campaign": snapshot.campaign,
         "source_url": snapshot.source_url,
         "unit_price_1": effective.get("unit_price_1"),
@@ -83,6 +89,7 @@ def list_snapshots(
     competitor_id: int | None = None,
     category: str | None = None,
     sku_id: int | None = None,
+    availability: str | None = None,
     q: str | None = None,
     role: str = "viewer",
     limit: int = 40,
@@ -102,6 +109,9 @@ def list_snapshots(
     if sku_id:
         stmt = stmt.where(Snapshot.sku_id == sku_id)
         count_stmt = count_stmt.where(Snapshot.sku_id == sku_id)
+    if availability:
+        stmt = stmt.where(Snapshot.availability == availability)
+        count_stmt = count_stmt.where(Snapshot.availability == availability)
     if q:
         like = f"%{q.strip()}%"
         condition = or_(Sku.name.ilike(like), Sku.sku_code.ilike(like))

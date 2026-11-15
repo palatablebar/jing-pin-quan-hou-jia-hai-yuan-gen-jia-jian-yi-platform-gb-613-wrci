@@ -253,10 +253,21 @@ def build_skus() -> list[dict]:
     return skus
 
 
+def _availability_of(sku: dict, day_offset: int) -> dict:
+    """可售状态（确定性）：只有 base 桶（本就不会出建议）的 SKU 会缺货/下架，
+    保证 42 条建议的验收口径不变，同时让列表/导出能看到缺货样本被排除的证据。"""
+    if day_offset == 2 and sku["bucket"] == "base" and sku["index"] % 61 == 0:
+        return {"availability": "out_of_stock", "stock": 0, "availability_note": "上游库存同步：大促临时缺货"}
+    if day_offset == 2 and sku["bucket"] == "base" and sku["index"] % 97 == 0:
+        return {"availability": "delisted", "stock": 0, "availability_note": "上游库存同步：链接已下架"}
+    return {"availability": "in_stock", "stock": sku["stock"] + day_offset, "availability_note": None}
+
+
 def build_snapshot(sku: dict, day_offset: int) -> dict:
     """day_offset: 0=今天、1=昨天、2=前天。返回快照字段（含算法 A 输入 spec）。"""
     factors = BUCKETS[sku["bucket"]]["factors"]
     factor = factors[2 - day_offset]  # 前天→今天因子递增（竞品逐步降价）
+    availability = _availability_of(sku, day_offset)
     if sku["sku_code"] == SHOWPIECE_CODE:
         spec = dict(SHOWPIECE_SPEC)
         spec["page_price"] = SHOWPIECE_SPEC["page_price"]
@@ -268,7 +279,7 @@ def build_snapshot(sku: dict, day_offset: int) -> dict:
             "platform_coupon": spec["platform_coupon"],
             "member_discount": 1.0,
             "campaign": ["618 预热", "618 开门红", "618 现货"][day_offset],
-            "stock": sku["stock"] + day_offset,
+            **availability,
             "spec": spec,
         }
 
@@ -309,7 +320,7 @@ def build_snapshot(sku: dict, day_offset: int) -> dict:
         "platform_coupon": spec["platform_coupon"],
         "member_discount": spec["member_discount"],
         "campaign": ["618 预热", "618 开门红", "618 现货"][day_offset],
-        "stock": sku["stock"] + day_offset,
+        **availability,
         "spec": spec,
     }
 

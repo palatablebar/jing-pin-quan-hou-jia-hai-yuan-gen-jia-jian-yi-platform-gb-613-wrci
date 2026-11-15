@@ -23,6 +23,27 @@ def _bootstrap_database() -> None:
 
     wait_for_db()
     Base.metadata.create_all(bind=engine)
+    _apply_incremental_columns()
+
+
+# create_all 不会给已存在的表补列；这里幂等补齐新增列（PostgreSQL 语法）。
+_INCREMENTAL_COLUMNS = (
+    "ALTER TABLE snapshots ADD COLUMN IF NOT EXISTS availability VARCHAR(16) NOT NULL DEFAULT 'in_stock'",
+    "ALTER TABLE snapshots ADD COLUMN IF NOT EXISTS availability_note VARCHAR(255)",
+    "ALTER TABLE snapshots ADD COLUMN IF NOT EXISTS availability_updated_at TIMESTAMP",
+    "ALTER TABLE advices ADD COLUMN IF NOT EXISTS stale_reason TEXT",
+    "CREATE INDEX IF NOT EXISTS idx_snapshots_availability ON snapshots (availability)",
+)
+
+
+def _apply_incremental_columns() -> None:
+    from sqlalchemy import text
+
+    if engine.dialect.name != "postgresql":
+        return
+    with engine.begin() as conn:
+        for statement in _INCREMENTAL_COLUMNS:
+            conn.execute(text(statement))
 
 
 def _run_seed_once() -> None:

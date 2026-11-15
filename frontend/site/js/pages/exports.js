@@ -1,6 +1,6 @@
 import { api } from '../api.js';
-import { can } from '../config.js';
-import { errorBox, errorMessage, esc, fmtTime, table, toast } from '../ui.js';
+import { ENUMS, can } from '../config.js';
+import { errorBox, errorMessage, esc, fmtTime, statStrip, table, toast } from '../ui.js';
 
 const ACTIONS = {
   'auth.login': '登录',
@@ -11,6 +11,7 @@ const ACTIONS = {
   'rule.create': '新建规则',
   'rule.update': '改规则',
   'snapshot.capture': '快照补录',
+  'snapshot.availability': '可售状态同步',
   'run.create': '发起测算',
   'run.complete': '测算完成',
   'advice.decide': '审批建议',
@@ -24,7 +25,7 @@ function exportCards(isAdmin) {
     {
       id: 'export-advices',
       title: '跟价建议清单',
-      desc: '每条建议的竞品 P10/P25/P50、建议价、价差、毛利、风险与审批结论；同时带券后 1/2/3 件价格与命中组合。',
+      desc: '每条建议的竞品 P10/P25/P50、建议价、价差、毛利、风险与审批结论；含可售样本数、排除报价数与失效原因，与当前建议口径一致。',
       path: '/api/exports/advices.csv',
       file: 'pricewatch-advices.csv',
       meta: 'advices.csv',
@@ -32,7 +33,7 @@ function exportCards(isAdmin) {
     {
       id: 'export-snapshots',
       title: '券后价快照',
-      desc: '页面价、满减、店铺券、平台券、会员折扣与算法 A 的三档券后单价，用于复核或对账。',
+      desc: '页面价、券配置与算法 A 的三档券后单价；每条报价带可售状态与库存，缺货/下架快照同样保留在导出里。',
       path: '/api/exports/snapshots.csv',
       file: 'pricewatch-snapshots.csv',
       meta: 'snapshots.csv',
@@ -59,15 +60,37 @@ function exportCards(isAdmin) {
     .join('')}</div>`;
 }
 
+/** 最近一次测算的可售口径：导出清单与当前建议的差异核对条。 */
+function runBasisStrip(run) {
+  if (!run) return '';
+  const metrics = run.metrics || {};
+  return `<div class="panel-body">
+    ${statStrip([
+      { label: '最近测算', value: run.run_no, hint: `${run.captured_on || '—'} · ${ENUMS.runStatus[run.status] || run.status}` },
+      { label: '当前建议', value: metrics.advices ?? run.output_count, hint: `失效 ${metrics.stale ?? metrics.staled ?? 0} 条（记录保留）` },
+      { label: '排除缺货/下架报价', value: metrics.excluded_unsellable ?? 0, hint: '不进跟价样本，快照保留' },
+      { label: '券后还原失败', value: metrics.invalid_snapshots ?? 0, hint: '非法快照不计样本' },
+    ])}
+    <p class="muted tiny">导出 CSV 与「跟价建议」页同源：状态列含「已失效」，可售样本数/排除报价数/失效原因三列用于核对早晚两次导出的差异。</p>
+  </div>`;
+}
+
 export const exportsPage = {
   async render(view, ctx) {
     const isAdmin = can(ctx.user.role, 'export:read');
     let audit = null;
     let auditError = null;
+    let latestRun = null;
     try {
       audit = await api.get('/api/audit', { limit: 80 });
     } catch (err) {
       auditError = err;
+    }
+    try {
+      const runs = await api.get('/api/runs', { limit: 1 });
+      latestRun = (runs.items || [])[0] || null;
+    } catch (err) {
+      latestRun = null;
     }
     view.innerHTML = `
       <section class="panel">
@@ -83,6 +106,14 @@ export const exportsPage = {
               : '<p class="muted tiny">当前角色可以查看页面上的一切价格结论，但导出接口由后端返回 403（真实状态码，不是前端隐藏）。</p>'
           }
         </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>当前建议口径</h2>
+          <span class="meta">跟价只依据可成交报价</span>
+        </div>
+        ${runBasisStrip(latestRun)}
       </section>
 
       <section class="panel">

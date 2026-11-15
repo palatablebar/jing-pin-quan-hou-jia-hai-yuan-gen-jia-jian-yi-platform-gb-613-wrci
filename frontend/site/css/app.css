@@ -1510,6 +1510,25 @@ table.data td.num {
   border-radius: 2px;
 }
 
+.notice {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--rule-strong);
+  border-left-width: 3px;
+  border-radius: 4px;
+  font-size: var(--fs-sm);
+  color: var(--ink-soft);
+  background: var(--paper-2, rgba(0, 0, 0, 0.02));
+}
+
+.notice.warn {
+  border-left-color: var(--warn, #b45309);
+}
+
+.notice.info {
+  border-left-color: var(--info, #2563eb);
+}
+
 .ellipsis {
   display: inline-block;
   max-width: 34ch;

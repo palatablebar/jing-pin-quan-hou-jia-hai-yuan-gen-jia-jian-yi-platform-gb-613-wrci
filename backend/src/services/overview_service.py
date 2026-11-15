@@ -40,6 +40,7 @@ def overview(db: Session) -> dict:
     snapshots_total = db.scalar(select(func.count()).select_from(Snapshot)) or 0
     advices_total = db.scalar(select(func.count()).select_from(Advice)) or 0
     pending_total = db.scalar(select(func.count()).select_from(Advice).where(Advice.status == "pending")) or 0
+    stale_total = db.scalar(select(func.count()).select_from(Advice).where(Advice.status == "stale")) or 0
     high_risk = (
         db.scalar(
             select(func.count()).select_from(Advice).where(Advice.severity == RiskLevel.HIGH.value, Advice.status == "pending")
@@ -55,10 +56,19 @@ def overview(db: Session) -> dict:
 
     latest_day = db.scalar(select(func.max(Snapshot.captured_on)))
     discount_rows = []
+    unsellable_latest = 0
     if latest_day:
         discount_rows = db.execute(
             select(Snapshot.effective).where(Snapshot.captured_on == latest_day)
         ).all()
+        unsellable_latest = (
+            db.scalar(
+                select(func.count())
+                .select_from(Snapshot)
+                .where(Snapshot.captured_on == latest_day, Snapshot.availability != "in_stock")
+            )
+            or 0
+        )
     discounts = [
         float(row[0]["discount_pct"])
         for row in discount_rows
@@ -135,6 +145,8 @@ def overview(db: Session) -> dict:
         "snapshots_total": snapshots_total,
         "advices_total": advices_total,
         "pending_total": pending_total,
+        "stale_total": stale_total,
+        "unsellable_snapshots": unsellable_latest,
         "high_risk_total": high_risk,
         "avg_gap_pct": avg_gap,
         "avg_margin_pct": avg_margin,

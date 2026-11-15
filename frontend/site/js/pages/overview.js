@@ -53,8 +53,8 @@ export const overviewPage = {
       <section class="kpi-grid" data-testid="overview-kpis">
         ${kpiTag({ label: '竞品店铺', value: data.competitors_total, suffix: '家', hint: '抖音 / 天猫 / 京东 / 拼多多 / 小红书 / 微店' })}
         ${kpiTag({ label: '自有 SKU', value: data.skus_total, suffix: '个', hint: '带成本、底价与目标毛利' })}
-        ${kpiTag({ label: '抓价快照', value: data.snapshots_total, suffix: '条', hint: `近 3 天，含券配置` })}
-        ${kpiTag({ label: '待审批建议', value: data.pending_total, suffix: '条', hint: `累计 ${data.advices_total} 条`, tone: 'accent' })}
+        ${kpiTag({ label: '抓价快照', value: data.snapshots_total, suffix: '条', hint: `近 3 天，含券配置；今日缺货/下架 ${data.unsellable_snapshots} 条` })}
+        ${kpiTag({ label: '待审批建议', value: data.pending_total, suffix: '条', hint: `累计 ${data.advices_total} 条 · 已失效 ${data.stale_total} 条`, tone: 'accent' })}
         ${kpiTag({ label: '高风险', value: data.high_risk_total, suffix: '条', hint: '破底价或毛利 < 5%', tone: data.high_risk_total ? 'danger' : '' })}
         ${kpiTag({ label: '平均价差', value: signedPct(data.avg_gap_pct), suffix: '', hint: `平均建议毛利 ${Number(data.avg_margin_pct).toFixed(2)}%`, tone: 'zinc' })}
       </section>

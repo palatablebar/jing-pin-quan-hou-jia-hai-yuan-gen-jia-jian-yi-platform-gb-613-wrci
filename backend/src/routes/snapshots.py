@@ -6,10 +6,10 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from src.config.database import get_db
-from src.constants.roles import SKU_WRITE_ROLES
+from src.constants.roles import SKU_WRITE_ROLES, AVAILABILITY_SYNC_ROLES
 from src.controllers import snapshot_controller
 from src.middlewares.rbac import READ_ROLES, require_roles
-from src.schemas.snapshot import SnapshotIn
+from src.schemas.snapshot import AvailabilitySyncIn, SnapshotIn
 from src.utils.pagination import page_params
 
 router = APIRouter(prefix="/snapshots", tags=["snapshots"])
@@ -21,6 +21,7 @@ def list_snapshots(
     competitor_id: int | None = None,
     category: str | None = None,
     sku_id: int | None = None,
+    availability: str | None = None,
     q: str | None = None,
     limit: int = Query(40),
     offset: int = Query(0),
@@ -34,11 +35,22 @@ def list_snapshots(
         competitor_id=competitor_id,
         category=category,
         sku_id=sku_id,
+        availability=availability,
         q=q,
         role=principal["role"],
         limit=page.limit,
         offset=page.offset,
     )
+
+
+@router.post("/availability")
+def sync_availability(
+    payload: AvailabilitySyncIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    principal: dict = Depends(require_roles(*AVAILABILITY_SYNC_ROLES)),
+) -> dict:
+    return snapshot_controller.sync_availability(db, payload.model_dump(), principal, request)
 
 
 @router.get("/{snapshot_id}")

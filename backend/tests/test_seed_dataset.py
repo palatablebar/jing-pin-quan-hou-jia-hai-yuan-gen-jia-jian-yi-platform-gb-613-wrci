@@ -52,6 +52,9 @@ def test_dataset_produces_expected_advice_counts():
     dataset = build_dataset()
     prices: dict[str, list[float]] = {}
     for snapshot in dataset["snapshots"]:
+        # 与测算口径一致：缺货/下架报价不进跟价样本（快照仍保留）
+        if snapshot.get("availability", "in_stock") != "in_stock":
+            continue
         result = effective_price.compute_effective_price(snapshot["spec"])
         assert result["valid"] is True, snapshot["sku_code"]
         prices.setdefault(snapshot["sku_code"], []).append(result["unit_price_1"])

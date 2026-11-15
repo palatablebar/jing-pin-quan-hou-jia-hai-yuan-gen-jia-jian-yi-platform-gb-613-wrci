@@ -24,6 +24,10 @@ class Snapshot(Base):
     platform_coupon: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     member_discount: Mapped[float] = mapped_column(Float, default=1.0)
     stock: Mapped[int] = mapped_column(Integer, default=0)
+    # 可售状态（上游库存同步）：每次报价各自保留，跟价只依据 in_stock 报价
+    availability: Mapped[str] = mapped_column(String(16), default="in_stock", index=True)
+    availability_note: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    availability_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     campaign: Mapped[str] = mapped_column(String(80), default="")
     source_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # 算法 A 输出：unit_price_1..3 / best / 命中组合说明

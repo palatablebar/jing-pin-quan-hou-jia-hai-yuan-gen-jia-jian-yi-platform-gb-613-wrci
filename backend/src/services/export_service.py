@@ -1,4 +1,8 @@
-"""导出服务：跟价建议清单 / 券后价快照 CSV（两个算法的结果都进导出）。"""
+"""导出服务：跟价建议清单 / 券后价快照 CSV（两个算法的结果都进导出）。
+
+导出与当前建议口径一致：跟价样本只含可成交报价；缺货/下架报价保留在快照导出里，
+建议清单带可售样本数、排除报价数与失效原因，方便核对导出差异。
+"""
 from __future__ import annotations
 
 from sqlalchemy import select
@@ -7,6 +11,7 @@ from sqlalchemy.orm import Session
 from src.constants.enums import (
     ADVICE_ACTION_LABELS,
     ADVICE_STATUS_LABELS,
+    AVAILABILITY_LABELS,
     CATEGORY_LABELS,
     RISK_LABELS,
     RUN_STATUS_LABELS,
@@ -48,20 +53,23 @@ def advices_csv(db: Session, run_id: int | None = None) -> bytes:
         "建议编号", "运行号", "SKU编码", "SKU名称", "类目", "竞品店铺",
         "页面价", "券后1件", "券后2件", "券后3件", "命中组合",
         "竞品P10", "竞品P25", "竞品P50", "我方当前价", "建议价", "价差%", "建议毛利%",
-        "风险", "动作", "状态", "规则", "审批人", "审批备注", "生成时间",
+        "风险", "动作", "状态", "可售样本数", "排除报价数", "失效原因", "规则", "审批人", "审批备注", "生成时间",
     ]
     rows = []
     for advice in advices:
         sku = skus.get(advice.sku_id)
         competitor = competitors.get(advice.competitor_id)
         run = runs.get(advice.run_id)
-        snapshot = (advice.payload or {}).get("snapshot") or {}
+        payload = advice.payload or {}
+        snapshot = payload.get("snapshot") or {}
         effective = {
             "full_reduction": snapshot.get("full_reduction"),
             "shop_coupon": snapshot.get("shop_coupon"),
             "platform_coupon": snapshot.get("platform_coupon"),
             "member_discount": snapshot.get("member_discount"),
         }
+        sample_quotes = payload.get("sample_quotes") or []
+        excluded_quotes = payload.get("excluded_quotes") or []
         rows.append(
             [
                 advice.id,
@@ -85,6 +93,9 @@ def advices_csv(db: Session, run_id: int | None = None) -> bytes:
                 RISK_LABELS.get(advice.severity, advice.severity),
                 ADVICE_ACTION_LABELS.get(advice.action, advice.action),
                 ADVICE_STATUS_LABELS.get(advice.status, advice.status),
+                payload.get("samples", len(sample_quotes)),
+                len(excluded_quotes),
+                advice.stale_reason or "",
                 advice.rule_code,
                 advice.approver or "",
                 advice.decide_note or "",
@@ -104,7 +115,8 @@ def snapshots_csv(db: Session, captured_on=None) -> bytes:
     headers = [
         "快照编号", "快照日期", "SKU编码", "SKU名称", "类目", "竞品店铺",
         "页面价", "满减", "店铺券", "平台券", "会员折扣",
-        "券后1件", "券后2件", "券后3件", "最优件数", "命中组合", "券后折扣%", "采集活动",
+        "券后1件", "券后2件", "券后3件", "最优件数", "命中组合", "券后折扣%",
+        "可售状态", "库存", "可售更新于", "可售备注", "采集活动",
     ]
     rows = []
     for snapshot in snapshots:
@@ -130,6 +142,10 @@ def snapshots_csv(db: Session, captured_on=None) -> bytes:
                 effective.get("best_units") or "",
                 effective.get("note") or "",
                 _fmt(effective.get("discount_pct")),
+                AVAILABILITY_LABELS.get(snapshot.availability or "in_stock", snapshot.availability),
+                snapshot.stock,
+                snapshot.availability_updated_at.strftime("%Y-%m-%d %H:%M") if snapshot.availability_updated_at else "",
+                snapshot.availability_note or "",
                 snapshot.campaign,
             ]
         )

@@ -85,19 +85,40 @@ class AdviceStatus(StrEnum):
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
+    STALE = "stale"  # 依据已失效（竞品缺货/下架或重算后无需跟价），记录保留不删除
 
 
 ADVICE_STATUS_LABELS: dict[str, str] = {
     AdviceStatus.PENDING.value: "待审批",
     AdviceStatus.APPROVED.value: "已批改价",
     AdviceStatus.REJECTED.value: "已驳回",
+    AdviceStatus.STALE.value: "已失效",
 }
 
 ADVICE_STATUS_ORDER: list[str] = [
     AdviceStatus.PENDING.value,
     AdviceStatus.APPROVED.value,
     AdviceStatus.REJECTED.value,
+    AdviceStatus.STALE.value,
 ]
+
+
+class Availability(StrEnum):
+    """竞品报价的可售状态（每次报价各自保留，跟价只依据可成交报价）。"""
+
+    IN_STOCK = "in_stock"  # 现货可售：当前仍能成交，计入跟价样本
+    OUT_OF_STOCK = "out_of_stock"  # 临时缺货：报价保留但不计样本
+    DELISTED = "delisted"  # 已下架：报价保留但不计样本
+
+
+AVAILABILITY_LABELS: dict[str, str] = {
+    Availability.IN_STOCK.value: "现货可售",
+    Availability.OUT_OF_STOCK.value: "临时缺货",
+    Availability.DELISTED.value: "已下架",
+}
+
+# 不计入跟价样本的可售状态（报价与快照仍保留，只是不可成交）
+UNSELLABLE_STATES: tuple[str, ...] = (Availability.OUT_OF_STOCK.value, Availability.DELISTED.value)
 
 
 class AdviceAction(StrEnum):

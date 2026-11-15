@@ -52,6 +52,7 @@ def serialize(db: Session, advice: Advice, role: str = "viewer") -> dict:
         "score": round(advice.score, 2),
         "status": advice.status,
         "status_label": ADVICE_STATUS_LABELS.get(advice.status, advice.status),
+        "stale_reason": advice.stale_reason,
         "current_price": round(advice.current_price, 2),
         "suggested_price": round(advice.suggested_price, 2),
         "effective_price": round(advice.effective_price, 2),

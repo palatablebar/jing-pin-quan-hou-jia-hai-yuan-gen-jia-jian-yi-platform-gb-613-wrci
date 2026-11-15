@@ -26,6 +26,7 @@ class Advice(Base):
     severity: Mapped[str] = mapped_column(String(12), default="low", index=True)  # 风险等级 high/medium/low
     score: Mapped[float] = mapped_column(Float, default=0.0)  # |gap_pct|
     status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
+    stale_reason: Mapped[str | None] = mapped_column(Text, nullable=True)  # 失效原因（status=stale 时）
     current_price: Mapped[float] = mapped_column(Float, default=0.0)
     suggested_price: Mapped[float] = mapped_column(Float, default=0.0)
     effective_price: Mapped[float] = mapped_column(Float, default=0.0)  # 竞品券后单件价

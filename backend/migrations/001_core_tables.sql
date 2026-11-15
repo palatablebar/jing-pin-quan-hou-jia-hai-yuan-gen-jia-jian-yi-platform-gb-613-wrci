@@ -62,7 +62,7 @@ CREATE TABLE skus (
     updated_at      TIMESTAMP    NOT NULL
 );
 
--- 抓价快照：页面价 + 券配置 + 算法 A 结果
+-- 抓价快照：页面价 + 券配置 + 算法 A 结果 + 可售状态（每次报价各自保留）
 CREATE TABLE snapshots (
     id              SERIAL PRIMARY KEY,
     sku_id          INTEGER      NOT NULL REFERENCES skus(id) ON DELETE CASCADE,
@@ -74,6 +74,9 @@ CREATE TABLE snapshots (
     platform_coupon JSON,
     member_discount DOUBLE PRECISION NOT NULL DEFAULT 1,
     stock           INTEGER      NOT NULL DEFAULT 0,
+    availability    VARCHAR(16)  NOT NULL DEFAULT 'in_stock',  -- in_stock/out_of_stock/delisted
+    availability_note VARCHAR(255),
+    availability_updated_at TIMESTAMP,
     campaign        VARCHAR(80),
     source_url      VARCHAR(255),
     effective       JSON,
@@ -132,7 +135,8 @@ CREATE TABLE advices (
     action          VARCHAR(16)  NOT NULL DEFAULT 'follow',
     severity        VARCHAR(12)  NOT NULL DEFAULT 'low',
     score           DOUBLE PRECISION NOT NULL DEFAULT 0,
-    status          VARCHAR(16)  NOT NULL DEFAULT 'pending',
+    status          VARCHAR(16)  NOT NULL DEFAULT 'pending',  -- pending/approved/rejected/stale
+    stale_reason    TEXT,                    -- 失效原因（缺货/下架或重算后无需跟价），记录保留
     current_price   DOUBLE PRECISION NOT NULL DEFAULT 0,
     suggested_price DOUBLE PRECISION NOT NULL DEFAULT 0,
     effective_price DOUBLE PRECISION NOT NULL DEFAULT 0,
@@ -154,4 +158,5 @@ CREATE TABLE advices (
 CREATE INDEX idx_advices_status ON advices (status);
 CREATE INDEX idx_advices_severity ON advices (severity);
 CREATE INDEX idx_snapshots_day ON snapshots (captured_on);
+CREATE INDEX idx_snapshots_availability ON snapshots (availability);
 CREATE INDEX idx_rules_priority ON rules (priority);

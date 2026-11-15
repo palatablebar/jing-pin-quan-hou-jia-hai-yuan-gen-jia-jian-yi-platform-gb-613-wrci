@@ -36,7 +36,7 @@
 | # | 模块 | 对应页面 | 后端 services + controller | 主要 API |
 |---|---|---|---|---|
 | ① | 竞品店铺与 SKU 价格口径维护（成本/底价/目标毛利/对标货号） | `#/catalog` | `competitor_service` + `competitor_controller`；`sku_service` + `sku_controller` | `GET/POST /api/competitors`、`PATCH /api/competitors/{id}`、`GET/POST /api/skus`、`GET/PATCH /api/skus/{id}` |
-| ② | 抓价任务与快照入库（回放 RPA 抓价、手工补录、按日期/店铺/类目检索） | `#/snapshots` | `snapshot_service` + `snapshot_controller` | `GET /api/snapshots`、`GET /api/snapshots/{id}`、`POST /api/snapshots` |
+| ② | 抓价任务与快照入库（回放 RPA 抓价、手工补录、按日期/店铺/类目/可售状态检索） | `#/snapshots` | `snapshot_service` + `snapshot_controller` | `GET /api/snapshots`、`GET /api/snapshots/{id}`、`POST /api/snapshots`、`POST /api/snapshots/availability`（上游库存同步） |
 | ③ | 券后价还原（算法 A，3 个件数档位 + 命中组合说明） | `#/snapshots`（列表列 + 明细抽屉） | `services/effective_price.py` + `pricing_service` | `POST /api/runs`（回放当日快照并重算）、`GET /api/snapshots/{id}`（`effective` 明细） |
 | ④ | 跟价规则与建议（算法 B：P25 锚点、成本底线、底价硬约束） | `#/advices`、`#/catalog` | `rule_service` + `follow_advice.py` + `pricing_service` + `advice_controller` | `GET/POST /api/rules`、`PATCH /api/rules/{id}`、`POST /api/runs`、`GET /api/advices` |
 | ⑤ | 审批与改价（批准/驳回、核定改价、审批人留痕） | `#/advices`（明细抽屉） | `advice_service` + `advice_controller` | `PATCH /api/advices/{id}/decision` |
@@ -77,6 +77,8 @@ unit(n)  = payable / n
 
 输入：该 SKU 对标竞品**近 3 天券后单件价**列表、成本 `cost`、底价 `floor_price`、目标毛利 `target_margin_pct`、我方当前价 `current_price`、命中规则的 `strategy` 与 `max_drop_pct`。
 
+**可售口径（缺货/下架不压价）**：每条抓价快照都带 `availability`（`in_stock` 现货可售 / `out_of_stock` 临时缺货 / `delisted` 已下架），逐条保留、绝不删除；但**只有当前仍能成交的报价**（`in_stock` 且券后价还原成功）才进入近 3 天样本。缺货/下架报价进入建议的 `excluded_quotes`（带排除原因），可售报价进入 `sample_quotes`（可售证据），页面与导出都能核对。窗口内没有可成交报价时不出新建议，已有建议标记 `stale`（已失效，记录保留）；可售状态恢复后同一条建议自动算活。
+
 ```
 P10/P25/P50 = 线性插值分位数（等价 numpy percentile）
 cost_floor   = max(cost × (1 + target_margin%/100), floor_price)
@@ -93,6 +95,8 @@ margin_pct   = (suggested − cost) / suggested × 100
 ```
 
 输出 `advice(action)`、`suggested_price`、`p10/p25/p50`、`margin_pct`、`risk`、`reason`（含每条触发原因）、`clamped_by`（`cost_floor`/`floor_price`/`hold`）与 `need_follow`（风险 high 或 |价差| ≥ 1.5% 才出建议）。
+
+**测算幂等与失效**：同一测算（同快照日 + 同竞品范围）重跑复用同一运行，建议按 `(run_id, sku_id)` 原地刷新，**不新增建议**；重算后不再成立的建议（竞品全部缺货/下架、价差回落到阈值内）标记 `stale` 并记录 `stale_reason`，不删除。上游库存同步（`POST /api/snapshots/availability`，admin/analyst）更新快照可售状态后，落在受影响测算窗口里的相关建议在同一事务里失效并重算，运行指标同步对齐，审计留痕 `snapshot.availability`。
 
 **手算校验**：`PB-sofa-001` 竞品三日券后 ¥279.00（P10=P25=P50=279），成本 ¥191.40、底价 ¥239.25、目标毛利 12% → 成本底线 ¥239.25，市价上限 `min(279×1.02, 319)=284.58` → 建议价 **¥284.58**，价差 **−10.79%**，建议毛利 **32.74%**，风险 low。
 
@@ -153,11 +157,11 @@ frontend/site/
 |---|---|---|---|
 | 竞品店铺 `Competitor` | `competitors` | code、name、platform、shop_url、capture_config、last_captured_at | `code` |
 | 自有 SKU `Sku` | `skus` | sku_code、name、category、competitor_id、cost、floor_price、target_margin_pct、current_price | `sku_code` |
-| 抓价快照 `Snapshot` | `snapshots` | sku_id、captured_on、page_price、满减/店铺券/平台券/会员折扣、effective(算法 A) | `(sku_id, captured_on)` |
+| 抓价快照 `Snapshot` | `snapshots` | sku_id、captured_on、page_price、满减/店铺券/平台券/会员折扣、availability（可售状态）、effective(算法 A) | `(sku_id, captured_on)` |
 | 跟价规则 `Rule` | `rules` | code、scope_kind/scope_value（sku>category>competitor>global）、strategy、target_margin_pct、max_drop_pct、priority | `code` |
-| 跟价建议 `Advice` | `advices` | run_id、sku_id、P10/P25/P50、suggested_price、margin_pct、gap_pct、severity、status、approver | `(run_id, sku_id)` |
+| 跟价建议 `Advice` | `advices` | run_id、sku_id、P10/P25/P50、suggested_price、margin_pct、gap_pct、severity、status（含 stale 已失效）、stale_reason、approver | `(run_id, sku_id)` |
 
-另有执行实体 `Run`（一次测算）与横切的 `User` / `AuditLog`。seed 口径：6 竞品 / 320 SKU / 960 快照（320×3 天）/ 5 条规则 / 1 次测算 → 42 条建议（high 9 / medium 13 / low 20）。
+另有执行实体 `Run`（一次测算）与横切的 `User` / `AuditLog`。seed 口径：6 竞品 / 320 SKU / 960 快照（320×3 天，含 8 条缺货/下架演示数据，只落在不出建议的 SKU 上）/ 5 条规则 / 1 次测算 → 42 条建议（high 9 / medium 13 / low 20）。
 
 ## 11. 共享枚举出现位置
 
@@ -168,7 +172,8 @@ frontend/site/
 | 类目 `sofa/table/bed/cabinet/decor` | `enums.py`（`Category` + `CATEGORY_LABELS`） | `config.js` → `ENUMS.category` |
 | 跟价策略 `guarded/aggressive/hold` | `enums.py`（`RuleStrategy`） | `config.js` → `ENUMS.strategy` |
 | 风险等级 `high/medium/low` | `enums.py`（`RiskLevel` + `RISK_LABELS`） | `config.js` → `ENUMS.risk` / `riskTone()` |
-| 审批状态 `pending/approved/rejected` | `enums.py`（`AdviceStatus`） | `config.js` → `ENUMS.adviceStatus` / `statusTone()` |
+| 审批状态 `pending/approved/rejected/stale` | `enums.py`（`AdviceStatus`） | `config.js` → `ENUMS.adviceStatus` / `statusTone()` |
+| 可售状态 `in_stock/out_of_stock/delisted` | `enums.py`（`Availability` + `AVAILABILITY_LABELS`） | `config.js` → `ENUMS.availability` / `availabilityTone()` |
 | 建议动作 `follow/hold/raise` | `enums.py`（`AdviceAction`） | `config.js` → `ENUMS.action` |
 | 运行状态 / 触发方式 | `enums.py`（`RunStatus` / `TriggerKind`） | `config.js` → `ENUMS.runStatus` / `ENUMS.trigger` |
 

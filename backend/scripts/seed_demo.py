@@ -155,6 +155,8 @@ def ensure_snapshots(db, specs: list[dict], skus: dict[str, Sku], competitors: d
                 platform_coupon=spec["platform_coupon"],
                 member_discount=spec["member_discount"],
                 stock=spec["stock"],
+                availability=spec.get("availability") or "in_stock",
+                availability_note=spec.get("availability_note"),
                 campaign=spec["campaign"],
                 source_url=f"{competitor.shop_url}/item/{sku.competitor_item_id}" if competitor.shop_url else None,
                 effective=result,

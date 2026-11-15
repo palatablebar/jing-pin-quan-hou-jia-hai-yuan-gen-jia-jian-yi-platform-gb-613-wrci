@@ -1,9 +1,9 @@
 import { api } from '../api.js';
-import { ENUMS, can, optionList } from '../config.js';
-import { drawer, errorBox, errorMessage, esc, field, filterBar, kv, table, toast } from '../ui.js';
+import { ENUMS, availabilityTone, can, optionList } from '../config.js';
+import { drawer, errorBox, errorMessage, esc, field, filterBar, fmtTime, kv, table, toast } from '../ui.js';
 import { couponText, money, priceCompare, signedPct } from '../components/price.js';
 
-const state = { capturedOn: '', competitorId: '', category: '', q: '' };
+const state = { capturedOn: '', competitorId: '', category: '', availability: '', q: '' };
 
 function unitTable(effective) {
   const units = effective.units || [];
@@ -27,8 +27,43 @@ function unitTable(effective) {
     <p class="muted tiny">命中组合按「满减单档 → 店铺券 → 平台跨店券（每满可重复）→ 会员折扣」顺序结算；最优件数 = 单件到手价最低。</p>`;
 }
 
+function availabilityBadge(item) {
+  return `<span class="badge ${availabilityTone(item.availability)}">${esc(item.availability_label || item.availability)}</span>`;
+}
+
+/** 可售证据：这条报价当前能否成交、依据是什么（上游同步时间/备注/链接）。 */
+function availabilityBlock(item) {
+  const sellableHint = item.sellable
+    ? '<span class="badge ok">计入跟价样本</span>'
+    : '<span class="badge warn">不计入跟价样本（报价保留）</span>';
+  return `${kv([
+    ['可售状态', `${availabilityBadge(item)} ${sellableHint}`],
+    ['库存', esc(item.stock)],
+    ['可售更新于', item.availability_updated_at ? fmtTime(item.availability_updated_at) : '—'],
+    ['可售备注', esc(item.availability_note || '—')],
+    ['商品链接', item.source_url ? `<a class="mono" href="${esc(item.source_url)}" target="_blank" rel="noreferrer">${esc(item.source_url)}</a>` : '—'],
+  ])}`;
+}
+
+function syncForm(item) {
+  return `<form id="availability-form" class="form-grid">
+    <div class="section-label">上游库存同步（更新后相关建议会失效并同步重算）</div>
+    ${field({
+      label: '可售状态',
+      name: 'availability',
+      value: item.availability,
+      options: optionList(ENUMS.availability, null),
+    })}
+    ${field({ label: '库存（留空则不改）', name: 'stock', type: 'number', value: '', attrs: 'min="0" step="1" placeholder="不修改"' })}
+    ${field({ label: '同步备注', name: 'note', placeholder: '例如：上游库存同步：大促临时缺货' })}
+    <div class="form-error" id="availability-error"></div>
+    <button class="btn accent" type="submit">同步可售状态</button>
+  </form>`;
+}
+
 function openSnapshot(view, ctx, item) {
-  const { root } = drawer({
+  const canSync = can(ctx.user.role, 'snapshot:sync');
+  const { root, close } = drawer({
     title: `${item.sku_name} · ${item.captured_on}`,
     subtitle: `${item.competitor_name} · 快照 #${item.id}`,
     body: `${priceCompare(item)}
@@ -37,14 +72,35 @@ function openSnapshot(view, ctx, item) {
         ['券配置', esc(couponText(item))],
         ['会员折扣', item.member_discount < 1 ? `${Math.round(item.member_discount * 100)}%` : '非会员价'],
         ['活动', esc(item.campaign || '—')],
-        ['库存', esc(item.stock)],
         ['算法 A 结论', esc(item.note || '—')],
         ['置信度', `${item.valid ? '0.99' : '0.00'}${(item.warnings || []).length ? ` · ${esc(item.warnings.join('；'))}` : ''}`],
       ])}
+      <div class="section-label">可售证据（跟价只依据可成交报价）</div>
+      ${availabilityBlock(item)}
       <div class="section-label">按件数拆解（算法 A 明细）</div>
       ${unitTable(item.effective || {})}`,
+    footer: canSync
+      ? syncForm(item)
+      : '<span class="mono muted">只有定价主管与价格运营可以同步上游可售状态；店长只读。</span>',
   });
   root.querySelector('[data-close]')?.addEventListener('click', () => {});
+  root.querySelector('#availability-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.target;
+    const update = { snapshot_id: item.id, availability: form.availability.value };
+    if (form.stock.value !== '') update.stock = Number(form.stock.value);
+    if (form.note.value.trim()) update.note = form.note.value.trim();
+    try {
+      const result = await api.post('/api/snapshots/availability', { items: [update] });
+      toast(
+        `可售状态已同步：${result.changed_count} 条变更，${result.invalidated.length} 条建议失效，${result.refreshed.length} 条建议已重算`,
+      );
+      close();
+      await snapshotsPage.render(view, ctx);
+    } catch (err) {
+      root.querySelector('#availability-error').textContent = errorMessage(err);
+    }
+  });
 }
 
 export const snapshotsPage = {
@@ -55,6 +111,7 @@ export const snapshotsPage = {
         captured_on: state.capturedOn,
         competitor_id: state.competitorId,
         category: state.category,
+        availability: state.availability,
         q: state.q,
         limit: 50,
       });
@@ -85,6 +142,7 @@ export const snapshotsPage = {
               value: state.competitorId,
               options: [{ value: '', label: '全部' }, ...(competitors.items || []).map((item) => ({ value: item.id, label: item.name }))],
             }),
+            field({ label: '可售状态', name: 'availability', value: state.availability, options: optionList(ENUMS.availability) }),
             field({ label: '搜索 SKU', name: 'q', value: state.q, placeholder: '名称 / 编码' }),
           ])}
         </div>
@@ -109,6 +167,11 @@ export const snapshotsPage = {
               render: (row) => `<span class="badge info">${signedPct(-Math.abs(Number(row.discount_pct)))}</span>`,
             },
             {
+              key: 'availability',
+              label: '可售状态',
+              render: (row) => `${availabilityBadge(row)}${row.sellable ? '' : '<div class="mono muted tiny">不计样本</div>'}`,
+            },
+            {
               key: 'note',
               label: '命中组合',
               render: (row) => `<span class="mono muted ellipsis">${esc(row.note || '—')}</span>`,
@@ -122,6 +185,7 @@ export const snapshotsPage = {
       state.capturedOn = filters.querySelector('[name=captured_on]').value;
       state.category = filters.querySelector('[name=category]').value;
       state.competitorId = filters.querySelector('[name=competitor_id]').value;
+      state.availability = filters.querySelector('[name=availability]').value;
       state.q = filters.querySelector('[name=q]').value.trim();
       snapshotsPage.render(view, ctx);
     });
@@ -147,7 +211,12 @@ export const snapshotsPage = {
       button.textContent = '测算中…';
       try {
         const run = await api.post('/api/runs', { captured_on: state.capturedOn || undefined, trigger: 'manual' });
-        toast(`测算完成 ${run.run_no}：${run.metrics.snapshots} 条快照 → ${run.metrics.advices} 条建议`);
+        const metrics = run.metrics || {};
+        toast(
+          `测算完成 ${run.run_no}：${metrics.snapshots} 条快照 → ${metrics.advices} 条建议`
+          + `${metrics.excluded_unsellable ? `，排除缺货/下架报价 ${metrics.excluded_unsellable} 条` : ''}`
+          + `${metrics.staled ? `，失效 ${metrics.staled} 条` : ''}`,
+        );
         await snapshotsPage.render(view, ctx);
       } catch (err) {
         toast(errorMessage(err), 'err');
