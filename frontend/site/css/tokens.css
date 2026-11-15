@@ -1,0 +1,53 @@
+/* 设计令牌：批发市场价签 —— 芥末黄 + 锌灰 + 打印体。
+   规则：oklch() 色板；禁用纯黑纯白；双字体（Oswald 打印体 + 思源黑体）；
+   所有价格数字走 tabular-nums + 等宽体，像贴在货架上的价签。 */
+:root {
+  /* 纸底（锌灰，不是纯白） */
+  --paper: oklch(0.945 0.006 250);
+  --paper-2: oklch(0.905 0.008 250);
+  --paper-3: oklch(0.862 0.01 250);
+  --tag-paper: oklch(0.985 0.014 95);
+
+  /* 墨色（锌灰，不是纯黑） */
+  --ink: oklch(0.29 0.014 250);
+  --ink-soft: oklch(0.45 0.012 250);
+  --ink-faint: oklch(0.605 0.01 250);
+  --rule: oklch(0.8 0.01 250);
+  --rule-strong: oklch(0.675 0.014 250);
+
+  /* 芥末黄主色 */
+  --accent: oklch(0.815 0.152 88);
+  --accent-soft: oklch(0.875 0.115 90);
+  --accent-deep: oklch(0.625 0.14 76);
+  --accent-ink: oklch(0.295 0.07 78);
+  --accent-wash: oklch(0.945 0.055 92);
+
+  --ok: oklch(0.5 0.09 158);
+  --ok-wash: oklch(0.935 0.032 158);
+  --warn: oklch(0.62 0.12 62);
+  --warn-wash: oklch(0.945 0.045 74);
+  --danger: oklch(0.505 0.16 28);
+  --danger-wash: oklch(0.935 0.04 30);
+  --info: oklch(0.48 0.05 245);
+  --info-wash: oklch(0.935 0.022 245);
+
+  /* 双字体：打印体负责标题与数字，思源黑体负责正文 */
+  --font-display: 'Oswald', 'Noto Sans SC', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+  --font-body: 'Noto Sans SC', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'SFMono-Regular', ui-monospace, monospace;
+
+  --fs-xs: 0.7rem;
+  --fs-sm: 0.81rem;
+  --fs-md: 0.93rem;
+  --fs-lg: 1.16rem;
+  --fs-xl: clamp(1.42rem, 2vw, 2rem);
+  --fs-2xl: clamp(1.9rem, 3.2vw, 3rem);
+
+  --pad: clamp(14px, 1.6vw, 28px);
+  --rail: 232px;
+  --radius: 2px;
+  --radius-tag: 3px;
+  --shadow: 0 1px 0 var(--rule), 0 16px 34px -30px oklch(0.32 0.02 250 / 0.6);
+  --shadow-tag: 0 10px 22px -18px oklch(0.3 0.03 250 / 0.75);
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
